@@ -14,6 +14,10 @@ defmodule Pool do
     GenServer.call(__MODULE__, {:add_to_pool, transaction})
   end
 
+  def take_from_pool() do
+    GenServer.call(__MODULE__, {:take_from_pool})
+  end
+
   def show_transactions_pool() do
     GenServer.call(__MODULE__, {:show_transactions_pool})
   end
@@ -23,7 +27,18 @@ defmodule Pool do
     {:reply, "A new transaction has been added to the pool.", new_state}
   end
 
+  def handle_call({:take_from_pool}, _from, state) do
+    get_state = state
+    new_state = []
+    {:reply, take_from_pool(get_state), new_state}
+  end
+
   def handle_call({:show_transactions_pool}, _from, state) do
     {:reply, state, state}
   end
+
+  defp take_from_pool(state) do
+    state
+  end
+
 end
