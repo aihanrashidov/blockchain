@@ -3,9 +3,9 @@ defmodule Blockchain do
 
   def start_link do
     GenServer.start_link(__MODULE__, [], name: __MODULE__)
-    pool_pid = Pool.start_link()
-    accounts_pid = Accounts.start_link()
-    coinbase_pid = Coinbase.start_link()
+    Pool.start_link()
+    Accounts.start_link()
+    Coinbase.start_link()
   end
 
   def init(_) do
@@ -148,47 +148,28 @@ defmodule Blockchain do
     difficulty_target_zeroes_string
   end
 
-  defp verify_transactions(all_transactions, [], new_list_of_valid_transactions) do
+  def verify_transactions([], accounts_list, new_list_of_valid_transactions) do
     new_list_of_valid_transactions
   end
 
-  defp verify_transactions(all_transactions, [head | tail], list_of_valid_transactions) do
-    transactions_from_each_acc = for n <- all_transactions, head.public_key == n.from, do: n
-    current_account_ballance = head.ballance
-    current_account = head
-    valid_transactions = check(transactions_from_each_acc, current_account_ballance, [], current_account)
-    new_list_of_valid_transactions = list_of_valid_transactions ++ valid_transactions
-    verify_transactions(all_transactions, tail, new_list_of_valid_transactions)
-  end
+  def verify_transactions([head | tail], accounts_list, list_of_valid_transactions) do
+    accounts_list = Accounts.show_accounts()
+    [sender_account] = for n <- accounts_list, n.public_key == head.from, do: n
+    [receiver_account] = for n <- accounts_list, n.public_key == head.to, do: n
 
-  defp check([], current_account_ballance, transactions, current_account) do
-    transactions
-  end
-
-  defp check([head | tail], current_account_ballance, transactions, current_account) do
     transaction_data = "#{head.from}#{head.to}#{head.amount}"
-    decoded_public_key = Base.decode16(current_account.public_key) |> elem(1)
+
+    decoded_public_key = Base.decode16(sender_account.public_key) |> elem(1)
     decoded_signature = Base.decode16(head.sig) |> elem(1)
     validate_signature = :crypto.verify(:ecdsa, :sha256, transaction_data, decoded_signature, [decoded_public_key, :secp256k1])
 
-    if head.amount <= current_account_ballance && validate_signature == true do
-      transactions = transactions ++ [head]
-
-      accounts_list = Accounts.show_accounts()
-
-      [receiving_account] = for n <- accounts_list, n.public_key == head.to, do: n
-      [sending_account] = for n <- accounts_list, n.public_key == head.from, do: n
-      Accounts.update_account_ballance_plus(receiving_account, head.amount)
-      Accounts.update_account_ballance_minus(sending_account, head.amount)
-
-      accounts_list = Accounts.show_accounts()
-
-      [sending_account] = for n <- accounts_list, n.public_key == head.from, do: n
-      new_account_ballance = sending_account.ballance
-
-      check(tail, new_account_ballance, transactions, sending_account)
+    if sender_account.ballance >= head.amount && validate_signature == true do
+      list_of_valid_transactions = list_of_valid_transactions ++ [head]
+      Accounts.update_account_ballance_plus(receiver_account, head.amount)
+      Accounts.update_account_ballance_minus(sender_account, head.amount)
+      verify_transactions(tail, accounts_list, list_of_valid_transactions)
     else
-      check(tail, current_account_ballance, transactions, current_account)
+      verify_transactions(tail, accounts_list, list_of_valid_transactions)
     end
   end
 
