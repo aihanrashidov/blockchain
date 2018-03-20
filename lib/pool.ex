@@ -1,13 +1,20 @@
 defmodule Pool do
+
+  @doc """
+  This is the Pool module. New transactions are kept here until a new
+  block is mined.
+  """
+
   use GenServer
+
+  ## Client API
+
+  @doc """
+  Starts the GenServer.
+  """
 
   def start_link do
     GenServer.start_link(__MODULE__, [], name: __MODULE__)
-  end
-
-  def init(_) do
-    state = []
-    {:ok, state}
   end
 
   def add_to_pool(transaction) do
@@ -20,6 +27,13 @@ defmodule Pool do
 
   def show_transactions_pool() do
     GenServer.call(__MODULE__, {:show_transactions_pool})
+  end
+
+  ## Server Callbacks
+
+  def init(_) do
+    state = []
+    {:ok, state}
   end
 
   def handle_call({:add_to_pool, transaction}, _from, state) do

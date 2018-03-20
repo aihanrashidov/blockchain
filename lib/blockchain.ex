@@ -68,11 +68,12 @@ defmodule Blockchain do
         block_s = %BlockStructure{}
         nonce = block_s.head.nonce
         difficulty_target = 3
-        new_block = mine(state, nonce, difficulty_target)
         Accounts.update_account_ballance_plus(acc, current_reward)
         Coinbase.update(current_reward)
         all_transactions = Pool.take_from_pool()
         verified_transactions = verify_transactions(all_transactions, accounts, [])
+        merkle_tree_hash = merkle_tree_hash_calculation(verified_transactions) |> Base.encode16
+        new_block = mine(state, nonce, difficulty_target, merkle_tree_hash)
         add_new_block(new_block, verified_transactions)
         generate_transaction("-", acc_pub_key, current_reward)
       else
@@ -96,6 +97,25 @@ defmodule Blockchain do
     GenServer.call(__MODULE__, {:update_new_block, transaction})
   end
 
+  def merkle_tree_hash_calculation(verified_transactions) do
+    if verified_transactions == [] do
+      <<0::256>>
+    else
+      transaction_hashes = calc_tx_hash(verified_transactions, [])
+      list_length = Kernel.length(transaction_hashes)
+
+      if rem(list_length, 2) == 1 do
+        last_transaction_hash = Enum.at(transaction_hashes, -1)
+        new_transaction_hashes = transaction_hashes ++ [last_transaction_hash]
+        [new_list] = calc_pairs(new_transaction_hashes, [])
+        new_list
+      else
+        [new_list] = calc_pairs(transaction_hashes, [])
+         new_list
+      end
+    end
+  end
+
   def handle_call({:show_blocks}, _from, state) do
     {:reply, state, state}
   end
@@ -114,7 +134,7 @@ defmodule Blockchain do
     {:reply, "New block was created and added to the chain.", new_state}
   end
 
-  defp mine(state, nonce, difficulty_target) do
+  defp mine(state, nonce, difficulty_target, merkle_tree_hash) do
     old_block = Enum.at(state, -1)
     new_timestamp = DateTime.utc_now() |> DateTime.to_string()
 
@@ -126,7 +146,7 @@ defmodule Blockchain do
         difficulty_target: difficulty_target,
         nonce: nonce,
         timestamp: new_timestamp,
-        merkle_root_hash: nil,
+        merkle_root_hash: merkle_tree_hash,
         chain_state_hash: nil
       }
     })
@@ -138,7 +158,7 @@ defmodule Blockchain do
       new_block
     else
       new_nonce = nonce + 1
-      mine(state, new_nonce, difficulty_target)
+      mine(state, new_nonce, difficulty_target, merkle_tree_hash)
     end
   end
 
@@ -171,6 +191,38 @@ defmodule Blockchain do
     else
       verify_transactions(tail, accounts_list, list_of_valid_transactions)
     end
+  end
+
+  def calc_tx_hash([], list) do
+    list
+  end
+
+  def calc_tx_hash([head | tail], list) do
+    transaction_data = "#{head.from}#{head.to}#{head.amount}#{head.sig}"
+    hash = :crypto.hash(:sha256, transaction_data)
+    list = list ++ [hash]
+    calc_tx_hash(tail, list)
+  end
+
+  def calc_pairs([], list) do
+    list_length = Kernel.length(list)
+
+    if list_length == 1 do
+      list
+    else
+      if rem(list_length, 2) == 1 do
+        last_transaction_hash = Enum.at(list, -1)
+        new_transaction_hashes = list ++ [last_transaction_hash]
+        calc_pairs(new_transaction_hashes, [])
+      else
+        calc_pairs(list, [])
+      end
+    end
+  end
+
+  def calc_pairs([h1, h2 | tail], list) do
+    list = list ++ [:crypto.hash(:sha256, "#{h1}#{h2}")]
+    calc_pairs(tail, list)
   end
 
 end
