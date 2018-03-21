@@ -28,7 +28,7 @@ defmodule Accounts do
     iex> Accounts.show_accounts()
     [
       %{
-        ballance: 100,
+        balance: 100,
         name: "Ayhan",
         private_key: "F7E8E57DA3D522082BBEADB7FDECE9BA",
         public_key: "045443F9C80243BC8A1EEFBA5F024076E499A103C92CB53B544C3E7D8161E1320550E0C0DB9A2DE1F6B77D4E18EF349EC48BE5D4C49AEDB31431DBE71FA8CEBBC4"
@@ -46,12 +46,12 @@ defmodule Accounts do
 
   ##Parameters:
   - name: String specifying the name of the account.
-  - tokens: Integer used for the initial account ballance. Default is 0.
+  - tokens: Integer used for the initial account balance. Default is 0.
 
   ##Examples:
 
     iex> Accounts.create_account("Ayhan", 100)
-    "New account with a ballance of 100 tokens has been created!"
+    "New account with a balance of 100 tokens has been created!"
 
   """
 
@@ -60,25 +60,25 @@ defmodule Accounts do
   end
 
   @doc """
-  These two functions update the specified account's ballance with X
+  These two functions update the specified account's balance with X
   tokens. One of them adds and the other one substracts tokens from the account
-  ballance.
+  balance.
 
   ##Parameters:
   - acc: Map containing account keys and values.
-  - tokens: Integer used to update the account's ballance.
+  - tokens: Integer used to update the account's balance.
 
   ##Examples:
   No examples.
 
   """
 
-  def update_account_ballance_plus(acc, tokens) do
-    GenServer.call(__MODULE__, {:update_account_ballance_plus, acc, tokens})
+  def update_account_balance_plus(acc, tokens) do
+    GenServer.call(__MODULE__, {:update_account_balance_plus, acc, tokens})
   end
 
-  def update_account_ballance_minus(acc, tokens) do
-    GenServer.call(__MODULE__, {:update_account_ballance_minus, acc, tokens})
+  def update_account_balance_minus(acc, tokens) do
+    GenServer.call(__MODULE__, {:update_account_balance_minus, acc, tokens})
   end
 
   ## Server Callbacks
@@ -99,26 +99,26 @@ defmodule Accounts do
       name: name,
       private_key: pr_key,
       public_key: pu_key,
-      ballance: tokens
+      balance: tokens
     }
     new_state = state ++ [acc_details]
-    {:reply, "New account with a ballance of #{tokens} tokens has been created!", new_state}
+    {:reply, "New account with a balance of #{tokens} tokens has been created!", new_state}
   end
 
-  def handle_call({:update_account_ballance_plus, acc, tokens}, _from, state) do
+  def handle_call({:update_account_balance_plus, acc, tokens}, _from, state) do
     state = state -- [acc]
-    acc_ballance = acc.ballance + tokens
-    updated_acc = %{acc | ballance: acc_ballance}
+    acc_balance = acc.balance + tokens
+    updated_acc = %{acc | balance: acc_balance}
     new_state = state ++ [updated_acc]
-    {:reply, "Account ballance updated!", new_state}
+    {:reply, "Account balance updated!", new_state}
   end
 
-  def handle_call({:update_account_ballance_minus, acc, tokens}, _from, state) do
+  def handle_call({:update_account_balance_minus, acc, tokens}, _from, state) do
     state = state -- [acc]
-    new_acc_ballance = acc.ballance - tokens
-    updated_acc = %{acc | ballance: new_acc_ballance}
+    new_acc_balance = acc.balance - tokens
+    updated_acc = %{acc | ballance: new_acc_balance}
     new_state = state ++ [updated_acc]
-    {:reply, "Account ballance updated!", new_state}
+    {:reply, "Account balance updated!", new_state}
   end
 
 end

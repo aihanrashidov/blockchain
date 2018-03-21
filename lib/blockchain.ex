@@ -40,6 +40,13 @@ defmodule Blockchain do
 
   def make_transaction(from, to, amount) do
     accounts = Accounts.show_accounts()
+    all_acc_public_keys = for n <- accounts, do: n.public_key
+
+    sender_key = for n <- all_acc_public_keys, n == from, do: 1
+    reciever_key = for n <- all_acc_public_keys, n == to, do: 1
+
+    if sender_key == [1] && reciever_key == [1] do
+
     [sender_account] = for n <- accounts, n.public_key == from, do: n
 
     sender_priv_key = sender_account.private_key
@@ -49,6 +56,9 @@ defmodule Blockchain do
     signature = :crypto.sign(:ecdsa, :sha256, transaction_data, [decoded_priv_key, :secp256k1]) |> Base.encode16()
     transaction = Map.from_struct(%TransactionStructure{from: from, to: to, amount: amount, sig: signature})
     Pool.add_to_pool(transaction)
+    else
+      "Invalid sender or reciever public key (address)."
+    end
   end
 
   def create_block(account_name) do
@@ -68,12 +78,13 @@ defmodule Blockchain do
         block_s = %BlockStructure{}
         nonce = block_s.head.nonce
         difficulty_target = 3
-        Accounts.update_account_ballance_plus(acc, current_reward)
+        Accounts.update_account_balance_plus(acc, current_reward)
         Coinbase.update(current_reward)
         all_transactions = Pool.take_from_pool()
-        verified_transactions = verify_transactions(all_transactions, accounts, [])
-        merkle_tree_hash = merkle_tree_hash_calculation(verified_transactions) |> Base.encode16
-        new_block = mine(state, nonce, difficulty_target, merkle_tree_hash)
+        verified_transactions = verify_transactions(all_transactions, [])
+        tx_merkle_tree_hash = tx_merkle_tree_hash_calculation(verified_transactions) |> Base.encode16
+        acc_merkle_tree_hash = acc_merkle_tree_hash_calculation(Accounts.show_accounts) |> Base.encode16
+        new_block = mine(state, nonce, difficulty_target, tx_merkle_tree_hash, acc_merkle_tree_hash)
         add_new_block(new_block, verified_transactions)
         generate_transaction("-", acc_pub_key, current_reward)
       else
@@ -97,7 +108,28 @@ defmodule Blockchain do
     GenServer.call(__MODULE__, {:update_new_block, transaction})
   end
 
-  def merkle_tree_hash_calculation(verified_transactions) do
+  defp acc_merkle_tree_hash_calculation(accounts) do
+    merkle_tree = :gb_merkle_trees.empty()
+
+    if accounts == [] do
+      <<0::256>>
+    else
+      account_hashes = calc_acc_hash(accounts, [])
+      list_length = Kernel.length(account_hashes)
+
+      if rem(list_length, 2) == 1 do
+        last_account_hash = Enum.at(account_hashes, -1)
+        new_account_hashes = account_hashes ++ [last_account_hash]
+        :gb_merkle_trees.root_hash(add_to_tree(new_account_hashes, merkle_tree))
+      else
+        :gb_merkle_trees.root_hash(add_to_tree(account_hashes, merkle_tree))
+      end
+    end
+  end
+
+  defp tx_merkle_tree_hash_calculation(verified_transactions) do
+    merkle_tree = :gb_merkle_trees.empty()
+
     if verified_transactions == [] do
       <<0::256>>
     else
@@ -107,11 +139,9 @@ defmodule Blockchain do
       if rem(list_length, 2) == 1 do
         last_transaction_hash = Enum.at(transaction_hashes, -1)
         new_transaction_hashes = transaction_hashes ++ [last_transaction_hash]
-        [new_list] = calc_pairs(new_transaction_hashes, [])
-        new_list
+        :gb_merkle_trees.root_hash(add_to_tree(new_transaction_hashes, merkle_tree))
       else
-        [new_list] = calc_pairs(transaction_hashes, [])
-         new_list
+        :gb_merkle_trees.root_hash(add_to_tree(transaction_hashes, merkle_tree))
       end
     end
   end
@@ -134,7 +164,7 @@ defmodule Blockchain do
     {:reply, "New block was created and added to the chain.", new_state}
   end
 
-  defp mine(state, nonce, difficulty_target, merkle_tree_hash) do
+  defp mine(state, nonce, difficulty_target, tx_merkle_tree_hash, acc_merkle_tree_hash) do
     old_block = Enum.at(state, -1)
     new_timestamp = DateTime.utc_now() |> DateTime.to_string()
 
@@ -146,8 +176,8 @@ defmodule Blockchain do
         difficulty_target: difficulty_target,
         nonce: nonce,
         timestamp: new_timestamp,
-        merkle_root_hash: merkle_tree_hash,
-        chain_state_hash: nil
+        merkle_root_hash: tx_merkle_tree_hash,
+        chain_state_hash: acc_merkle_tree_hash
       }
     })
 
@@ -158,7 +188,7 @@ defmodule Blockchain do
       new_block
     else
       new_nonce = nonce + 1
-      mine(state, new_nonce, difficulty_target, merkle_tree_hash)
+      mine(state, new_nonce, difficulty_target, tx_merkle_tree_hash, acc_merkle_tree_hash)
     end
   end
 
@@ -168,11 +198,11 @@ defmodule Blockchain do
     difficulty_target_zeroes_string
   end
 
-  def verify_transactions([], accounts_list, new_list_of_valid_transactions) do
+  def verify_transactions([], new_list_of_valid_transactions) do
     new_list_of_valid_transactions
   end
 
-  def verify_transactions([head | tail], accounts_list, list_of_valid_transactions) do
+  def verify_transactions([head | tail], list_of_valid_transactions) do
     accounts_list = Accounts.show_accounts()
     [sender_account] = for n <- accounts_list, n.public_key == head.from, do: n
     [receiver_account] = for n <- accounts_list, n.public_key == head.to, do: n
@@ -183,26 +213,49 @@ defmodule Blockchain do
     decoded_signature = Base.decode16(head.sig) |> elem(1)
     validate_signature = :crypto.verify(:ecdsa, :sha256, transaction_data, decoded_signature, [decoded_public_key, :secp256k1])
 
-    if sender_account.ballance >= head.amount && validate_signature == true do
+    if sender_account.balance >= head.amount && validate_signature == true do
       list_of_valid_transactions = list_of_valid_transactions ++ [head]
-      Accounts.update_account_ballance_plus(receiver_account, head.amount)
-      Accounts.update_account_ballance_minus(sender_account, head.amount)
-      verify_transactions(tail, accounts_list, list_of_valid_transactions)
+      Accounts.update_account_balance_plus(receiver_account, head.amount)
+      Accounts.update_account_balance_minus(sender_account, head.amount)
+      verify_transactions(tail, list_of_valid_transactions)
     else
-      verify_transactions(tail, accounts_list, list_of_valid_transactions)
+      verify_transactions(tail, list_of_valid_transactions)
     end
   end
 
-  def calc_tx_hash([], list) do
+  defp calc_tx_hash([], list) do
     list
   end
 
-  def calc_tx_hash([head | tail], list) do
+  defp calc_tx_hash([head | tail], list) do
     transaction_data = "#{head.from}#{head.to}#{head.amount}#{head.sig}"
-    hash = :crypto.hash(:sha256, transaction_data)
+    hash = {:crypto.hash(:sha256, transaction_data), transaction_data}
     list = list ++ [hash]
     calc_tx_hash(tail, list)
   end
+
+  defp calc_acc_hash([], list) do
+    list
+  end
+
+  defp calc_acc_hash([head | tail], list) do
+    account_data = "#{head.name}#{head.private_key}#{head.public_key}#{head.ballance}"
+    hash = {:crypto.hash(:sha256, account_data), account_data}
+    list = list ++ [hash]
+    calc_acc_hash(tail, list)
+  end
+
+  defp add_to_tree([], merkle_tree) do
+    merkle_tree
+  end
+
+  defp add_to_tree([head | tail], merkle_tree) do
+    merkle_tree = :gb_merkle_trees.enter(elem(head, 0), elem(head, 1), merkle_tree)
+    add_to_tree(tail, merkle_tree)
+  end
+
+@doc """
+  Transaction hashes pair calculations.
 
   def calc_pairs([], list) do
     list_length = Kernel.length(list)
@@ -221,8 +274,10 @@ defmodule Blockchain do
   end
 
   def calc_pairs([h1, h2 | tail], list) do
-    list = list ++ [:crypto.hash(:sha256, "#{h1}#{h2}")]
+    list = list ++ [:crypto.hash(:sha256, "{h1}{h2}")]
     calc_pairs(tail, list)
   end
+
+"""
 
 end

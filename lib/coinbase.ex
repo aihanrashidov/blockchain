@@ -54,7 +54,7 @@ defmodule Coinbase do
   ## Server Callbacks
 
   def init(_) do
-    state = %{total: 1000, current_reward: 50, blocks: 0}
+    state = %{total: 1000, current_reward: 10, blocks: 0}
     {:ok, state}
   end
 
