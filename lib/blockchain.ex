@@ -1,5 +1,17 @@
 defmodule Blockchain do
+
+  @doc """
+  This is the main module of the blockchain. Here are the functions for mining
+  a new block and making new transactions.
+  """
+
   use GenServer
+
+  ## Client API
+
+  @doc """
+  Starts the GenServer.
+  """
 
   def start_link do
     GenServer.start_link(__MODULE__, [], name: __MODULE__)
@@ -8,36 +20,78 @@ defmodule Blockchain do
     Coinbase.start_link()
   end
 
-  def init(_) do
-    genesis_block = %{
+  @doc """
+  Returns the state (shows the blocks added to the chain).
+
+  ##Parameters:
+  No parameters.
+
+  ##Examples:
+
+    iex> Blockchain.show_blocks()
+  [
+    %{
       head: %{
-        index: 0,
-        hash: "5FECEB66FFC86F38D952786C6D696C79C2DBC239DD4E91B46729D73A27FB57E9",
-        previous_hash: 0,
-        timestamp: DateTime.utc_now() |> DateTime.to_string(),
+        chain_state_hash: nil,
         difficulty_target: 0,
-        nonce: 0,
+        hash: "5FECEB66FFC86F38D952786C6D696C79C2DBC239DD4E91B46729D73A27FB57E9",
+        index: 0,
         merkle_root_hash: nil,
-        chain_state_hash: nil
+        nonce: 0,
+        previous_hash: 0,
+        timestamp: "2018-03-22 07:14:14.784450Z"
       },
+      transaction_list: [%{amount: 0, from: nil, sig: nil, to: nil}]
+    },
+    %{
+      head: %{
+        chain_state_hash: "EBF26D768B09901B7DD0D33B86A063FE9498A73EEC4ABEE0242B97EECFE36414",
+        difficulty_target: 3,
+        hash: "000A12D8636958529717E8AD844A39F2AF8C0C8A8CCE15A0069FBD86284CE1D1",
+        index: 1,
+        merkle_root_hash: "0000000000000000000000000000000000000000000000000000000000000000",
+        nonce: 7217,
+        previous_hash: "5FECEB66FFC86F38D952786C6D696C79C2DBC239DD4E91B46729D73A27FB57E9",
+        timestamp: "2018-03-22 07:14:26.404340Z"
+    },
       transaction_list: [
         %{
-          from: nil,
-          to: nil,
-          amount: 0,
-          sig: nil
+          amount: 10,
+          from: "-",
+          sig: "-",
+          to: "04CFA73565888405A01C01945F652F1A18FC5B2DE0B05AED1A3EFE8B04E3CF7B18008D0969CE8A3DFAE611BC9E8624575EE7A355EB461801A75A1F2746D2FF0635"
         }
       ]
     }
+  ]
 
-    state = [genesis_block]
-    {:ok, state}
-  end
+  """
 
+  @spec show_blocks() :: list()
   def show_blocks() do
     GenServer.call(__MODULE__, {:show_blocks})
   end
 
+  @doc """
+  Makes a new transaction and adds it to the pool of transactions.
+
+  ##Parameters:
+  - from: String specifying the public key of the sending account.
+  - to: String specifying the public key of the receiving account.
+  - amount: Integer specifying the amount of tokens sent.
+
+  ##Examples:
+
+    iex> Blockchain.make_transaction("04CFA73565888405A01C01945F652F1A18FC5B2D
+    E0B05AED1A3EFE8B04E3CF7B18008D0969CE8A3DFAE611BC9E8624575EE7A355EB461801A7
+    5A1F2746D2FF0635", "04B28814A4DC21F95BBD2DD0FA55FA76D301321D2771DBB5836B51
+    A314C39C9ECA935796BE3B58833DD8B1EB35B7C035E975C99A6363AA47BF3C612FFB15F2BC
+    3F", 100)
+    "A new transaction has been added to the pool."
+
+  """
+
+  @spec make_transaction(String, String, Integer) :: :message
   def make_transaction(from, to, amount) do
     accounts = Accounts.show_accounts()
     all_acc_public_keys = for n <- accounts, do: n.public_key
@@ -61,6 +115,21 @@ defmodule Blockchain do
     end
   end
 
+  @doc """
+  Function for mining a new block.
+
+  ##Parameters:
+  - account_name: String specifying the account name which will mine the new
+  block so the reward can be sent to it's public key.
+
+  ##Examples:
+
+    iex> Blockchain.create_account("Ayhan")
+    "New block was created and added to the chain."
+
+  """
+
+  @spec create_block(String) :: :message
   def create_block(account_name) do
     coinbase = Coinbase.get_total_value()
     total_reward_value = coinbase.total
@@ -95,55 +164,44 @@ defmodule Blockchain do
     end
   end
 
+  @doc """
+  These two functions are called during the block creation.
+  """
+
   def add_new_block(new_block, verified_transactions) do
     GenServer.call(__MODULE__, {:add_new_block, new_block, verified_transactions})
-  end
-
-  def generate_transaction(from, to, amount) do
-    transaction = Map.from_struct(%TransactionStructure{from: from, to: to, amount: amount, sig: "-"})
-    update_new_block(transaction)
   end
 
   def update_new_block(transaction) do
     GenServer.call(__MODULE__, {:update_new_block, transaction})
   end
 
-  defp acc_merkle_tree_hash_calculation(accounts) do
-    merkle_tree = :gb_merkle_trees.empty()
+  ## Server Callbacks
 
-    if accounts == [] do
-      <<0::256>>
-    else
-      account_hashes = calc_acc_hash(accounts, [])
-      list_length = Kernel.length(account_hashes)
+  def init(_) do
+    genesis_block = %{
+      head: %{
+        index: 0,
+        hash: "5FECEB66FFC86F38D952786C6D696C79C2DBC239DD4E91B46729D73A27FB57E9",
+        previous_hash: 0,
+        timestamp: DateTime.utc_now() |> DateTime.to_string(),
+        difficulty_target: 0,
+        nonce: 0,
+        merkle_root_hash: nil,
+        chain_state_hash: nil
+      },
+      transaction_list: [
+        %{
+          from: nil,
+          to: nil,
+          amount: 0,
+          sig: nil
+        }
+      ]
+    }
 
-      if rem(list_length, 2) == 1 do
-        last_account_hash = Enum.at(account_hashes, -1)
-        new_account_hashes = account_hashes ++ [last_account_hash]
-        :gb_merkle_trees.root_hash(add_to_tree(new_account_hashes, merkle_tree))
-      else
-        :gb_merkle_trees.root_hash(add_to_tree(account_hashes, merkle_tree))
-      end
-    end
-  end
-
-  defp tx_merkle_tree_hash_calculation(verified_transactions) do
-    merkle_tree = :gb_merkle_trees.empty()
-
-    if verified_transactions == [] do
-      <<0::256>>
-    else
-      transaction_hashes = calc_tx_hash(verified_transactions, [])
-      list_length = Kernel.length(transaction_hashes)
-
-      if rem(list_length, 2) == 1 do
-        last_transaction_hash = Enum.at(transaction_hashes, -1)
-        new_transaction_hashes = transaction_hashes ++ [last_transaction_hash]
-        :gb_merkle_trees.root_hash(add_to_tree(new_transaction_hashes, merkle_tree))
-      else
-        :gb_merkle_trees.root_hash(add_to_tree(transaction_hashes, merkle_tree))
-      end
-    end
+    state = [genesis_block]
+    {:ok, state}
   end
 
   def handle_call({:show_blocks}, _from, state) do
@@ -161,8 +219,10 @@ defmodule Blockchain do
     new_block = %{new_block | transaction_list: verified_transactions}
     new_state = state ++ [new_block]
 
-    {:reply, "New block was created and added to the chain.", new_state}
+    {:reply, :ok, new_state}
   end
+
+  ## Private
 
   defp mine(state, nonce, difficulty_target, tx_merkle_tree_hash, acc_merkle_tree_hash) do
     old_block = Enum.at(state, -1)
@@ -198,11 +258,16 @@ defmodule Blockchain do
     difficulty_target_zeroes_string
   end
 
-  def verify_transactions([], new_list_of_valid_transactions) do
+  defp generate_transaction(from, to, amount) do
+    transaction = Map.from_struct(%TransactionStructure{from: from, to: to, amount: amount, sig: "-"})
+    update_new_block(transaction)
+  end
+
+  defp verify_transactions([], new_list_of_valid_transactions) do
     new_list_of_valid_transactions
   end
 
-  def verify_transactions([head | tail], list_of_valid_transactions) do
+  defp verify_transactions([head | tail], list_of_valid_transactions) do
     accounts_list = Accounts.show_accounts()
     [sender_account] = for n <- accounts_list, n.public_key == head.from, do: n
     [receiver_account] = for n <- accounts_list, n.public_key == head.to, do: n
@@ -223,6 +288,25 @@ defmodule Blockchain do
     end
   end
 
+  defp tx_merkle_tree_hash_calculation(verified_transactions) do
+    merkle_tree = :gb_merkle_trees.empty()
+
+    if verified_transactions == [] do
+      <<0::256>>
+    else
+      transaction_hashes = calc_tx_hash(verified_transactions, [])
+      list_length = Kernel.length(transaction_hashes)
+
+      if rem(list_length, 2) == 1 do
+        last_transaction_hash = Enum.at(transaction_hashes, -1)
+        new_transaction_hashes = transaction_hashes ++ [last_transaction_hash]
+        :gb_merkle_trees.root_hash(add_to_tree(new_transaction_hashes, merkle_tree))
+      else
+        :gb_merkle_trees.root_hash(add_to_tree(transaction_hashes, merkle_tree))
+      end
+    end
+  end
+
   defp calc_tx_hash([], list) do
     list
   end
@@ -234,12 +318,31 @@ defmodule Blockchain do
     calc_tx_hash(tail, list)
   end
 
+  defp acc_merkle_tree_hash_calculation(accounts) do
+    merkle_tree = :gb_merkle_trees.empty()
+
+    if accounts == [] do
+      <<0::256>>
+    else
+      account_hashes = calc_acc_hash(accounts, [])
+      list_length = Kernel.length(account_hashes)
+
+      if rem(list_length, 2) == 1 do
+        last_account_hash = Enum.at(account_hashes, -1)
+        new_account_hashes = account_hashes ++ [last_account_hash]
+        :gb_merkle_trees.root_hash(add_to_tree(new_account_hashes, merkle_tree))
+      else
+        :gb_merkle_trees.root_hash(add_to_tree(account_hashes, merkle_tree))
+      end
+    end
+  end
+
   defp calc_acc_hash([], list) do
     list
   end
 
   defp calc_acc_hash([head | tail], list) do
-    account_data = "#{head.name}#{head.private_key}#{head.public_key}#{head.ballance}"
+    account_data = "#{head.name}#{head.private_key}#{head.public_key}#{head.balance}"
     hash = {:crypto.hash(:sha256, account_data), account_data}
     list = list ++ [hash]
     calc_acc_hash(tail, list)
@@ -253,31 +356,5 @@ defmodule Blockchain do
     merkle_tree = :gb_merkle_trees.enter(elem(head, 0), elem(head, 1), merkle_tree)
     add_to_tree(tail, merkle_tree)
   end
-
-@doc """
-  Transaction hashes pair calculations.
-
-  def calc_pairs([], list) do
-    list_length = Kernel.length(list)
-
-    if list_length == 1 do
-      list
-    else
-      if rem(list_length, 2) == 1 do
-        last_transaction_hash = Enum.at(list, -1)
-        new_transaction_hashes = list ++ [last_transaction_hash]
-        calc_pairs(new_transaction_hashes, [])
-      else
-        calc_pairs(list, [])
-      end
-    end
-  end
-
-  def calc_pairs([h1, h2 | tail], list) do
-    list = list ++ [:crypto.hash(:sha256, "{h1}{h2}")]
-    calc_pairs(tail, list)
-  end
-
-"""
 
 end

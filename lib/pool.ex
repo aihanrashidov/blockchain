@@ -28,6 +28,7 @@ defmodule Pool do
 
   """
 
+  @spec add_to_pool(Map) :: :message
   def add_to_pool(transaction) do
     GenServer.call(__MODULE__, {:add_to_pool, transaction})
   end
@@ -43,6 +44,7 @@ defmodule Pool do
 
   """
 
+  @spec take_from_pool() :: list()
   def take_from_pool() do
     GenServer.call(__MODULE__, {:take_from_pool})
   end
@@ -79,6 +81,7 @@ defmodule Pool do
 
   """
 
+  @spec show_transactions_pool() :: list()
   def show_transactions_pool() do
     GenServer.call(__MODULE__, {:show_transactions_pool})
   end

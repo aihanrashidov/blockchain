@@ -36,7 +36,7 @@ defmodule Accounts do
     ]
 
   """
-
+  @spec show_accounts() :: list()
   def show_accounts() do
     GenServer.call(__MODULE__, {:show_accounts})
   end
@@ -54,7 +54,7 @@ defmodule Accounts do
     "New account with a balance of 100 tokens has been created!"
 
   """
-
+  @spec create_account(String, Integer) :: :message
   def create_account(name, tokens \\ 0) do
     GenServer.call(__MODULE__, {:create_account, name, tokens})
   end
@@ -72,11 +72,12 @@ defmodule Accounts do
   No examples.
 
   """
-
+  @spec update_account_balance_plus(Map, Integer) :: :message
   def update_account_balance_plus(acc, tokens) do
     GenServer.call(__MODULE__, {:update_account_balance_plus, acc, tokens})
   end
 
+  @spec update_account_balance_minus(Map, Integer) :: :message
   def update_account_balance_minus(acc, tokens) do
     GenServer.call(__MODULE__, {:update_account_balance_minus, acc, tokens})
   end
@@ -93,16 +94,23 @@ defmodule Accounts do
   end
 
   def handle_call({:create_account, name, tokens}, _from, state) do
-    {pr_key, pu_key} = Keys.create_keys()
 
-    acc_details = %{
-      name: name,
-      private_key: pr_key,
-      public_key: pu_key,
-      balance: tokens
-    }
-    new_state = state ++ [acc_details]
-    {:reply, "New account with a balance of #{tokens} tokens has been created!", new_state}
+    n = get_name(name, state)
+
+    if n == true do
+      {:reply, "This name is already in use.", state}
+    else
+      {pr_key, pu_key} = Keys.create_keys()
+
+      acc_details = %{
+        name: name,
+        private_key: pr_key,
+        public_key: pu_key,
+        balance: tokens
+      }
+      new_state = state ++ [acc_details]
+      {:reply, "New account with a balance of #{tokens} tokens has been created!", new_state}
+    end
   end
 
   def handle_call({:update_account_balance_plus, acc, tokens}, _from, state) do
@@ -116,9 +124,21 @@ defmodule Accounts do
   def handle_call({:update_account_balance_minus, acc, tokens}, _from, state) do
     state = state -- [acc]
     new_acc_balance = acc.balance - tokens
-    updated_acc = %{acc | ballance: new_acc_balance}
+    updated_acc = %{acc | balance: new_acc_balance}
     new_state = state ++ [updated_acc]
     {:reply, "Account balance updated!", new_state}
+  end
+
+  defp get_name(name, []) do
+    false
+  end
+
+  defp get_name(name, [head | tail]) do
+    if name == head.name do
+      true
+    else
+      get_name(name, tail)
+    end
   end
 
 end

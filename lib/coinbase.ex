@@ -31,6 +31,7 @@ defmodule Coinbase do
 
   """
 
+  @spec get_total_value() :: list()
   def get_total_value() do
     GenServer.call(__MODULE__, {:get_total_value})
   end
@@ -47,6 +48,7 @@ defmodule Coinbase do
 
   """
 
+  @spec update(Integer) :: list()
   def update(amount) do
     GenServer.call(__MODULE__, {:update, amount})
   end
